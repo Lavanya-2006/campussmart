@@ -14,6 +14,20 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '20kb' }));
 app.use(express.static(publicDirectory));
 
+async function connectToDatabase() {
+  if (!process.env.MONGODB_URI) {
+    throw new Error('MONGODB_URI is not configured.');
+  }
+  if (mongoose.connection.readyState === 1) return;
+  if (!global.mongooseConnectionPromise) {
+    global.mongooseConnectionPromise = mongoose.connect(process.env.MONGODB_URI).catch((error) => {
+      global.mongooseConnectionPromise = null;
+      throw error;
+    });
+  }
+  await global.mongooseConnectionPromise;
+}
+
 function createComplaintId() {
   const date = new Date();
   const year = date.getFullYear();
@@ -144,16 +158,19 @@ app.use((error, req, res, next) => {
 });
 
 async function start() {
-  if (!process.env.MONGODB_URI) {
-    throw new Error('MONGODB_URI is missing. Copy .env.example to .env and configure it.');
-  }
-  await mongoose.connect(process.env.MONGODB_URI);
+  await connectToDatabase();
   app.listen(port, () => {
     console.log(`Smart Campus is running at http://localhost:${port}`);
   });
 }
 
-start().catch((error) => {
-  console.error('Unable to start Smart Campus:', error.message);
-  process.exitCode = 1;
-});
+app.connectToDatabase = connectToDatabase;
+
+if (require.main === module) {
+  start().catch((error) => {
+    console.error('Unable to start Smart Campus:', error.message);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = app;

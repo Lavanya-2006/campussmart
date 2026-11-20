@@ -65,24 +65,47 @@ A responsive campus complaint portal built with plain HTML, CSS, and JavaScript,
 
 The server checks MongoDB before listening. If it cannot connect, check that MongoDB is running and the `MONGODB_URI` in `.env` is correct.
 
+## Deploy to Vercel
+
+The `public/` folder is served as static frontend files, and `api/[...path].js` adapts the Express API to Vercel's serverless function runtime. The app reuses its MongoDB connection within a warm function instance.
+
+1. Push the latest project changes to the GitHub repository.
+2. Sign in at [vercel.com](https://vercel.com), choose **Add New → Project**, and import `Lavanya-2006/campussmart`.
+3. Keep the detected Node.js project settings. There is no build command required; the static UI and `api/` function are deployed from the repository.
+4. In the Vercel project setup (or later under **Settings → Environment Variables**), add:
+
+   - Name: `MONGODB_URI`
+   - Value: your MongoDB Atlas connection URI, including a database name such as `smart-campus-complaints`
+   - Environment: **Production**, and also **Preview** if you want preview deployments to use the database
+
+   Do not add the URI to source code or `vercel.json`. In Atlas, add Vercel's outbound network access as allowed by your cluster configuration. For a quick demo, Atlas may require allowing `0.0.0.0/0`; this opens network access broadly, so use a strong database password and least-privilege database user. Prefer a fixed-egress solution when available.
+
+5. Click **Deploy**. If an environment variable is added after deployment, redeploy so the function receives it.
+6. Open the Vercel deployment URL and check `<deployment-url>/api/health`. It should return `"status":"ok"` and `"database":"connected"`.
+
+The admin dashboard currently has no authentication. Do not deploy it publicly with real student data until administrator sign-in and API authorization are implemented.
+
 ## Project architecture
 
 ```text
 Browser
   public/index.html, styles.css, app.js
        │ same-origin JSON requests (/api/*)
-       ▼
-Node.js + Express (server.js)
-  ├─ request validation and REST routes
-  ├─ local static-file hosting
-  └─ Mongoose model (models/Complaint.js)
-       │ MONGODB_URI from private .env
-       ▼
+       ├─ Local: Express server (server.js)
+       └─ Vercel: serverless adapter (api/[...path].js)
+                    │
+                    ▼
+             Express routes (server.js)
+                    │
+                    ▼
+       Mongoose model (models/Complaint.js)
+                    │ MONGODB_URI from .env or Vercel environment
+                    ▼
 MongoDB (smart-campus-complaints database)
 ```
 
 - **Frontend:** `public/` contains the student and admin views. `app.js` calls the API and renders returned data; it does not store complaints in browser storage.
-- **Backend:** `server.js` serves the UI and exposes the JSON API. It validates inputs, generates IDs, computes dashboard counts, and reports errors.
+- **Backend:** `server.js` exposes the Express JSON API and hosts static files for local use. `api/[...path].js` connects to MongoDB and forwards API requests to Express in Vercel. The API validates inputs, generates IDs, computes dashboard counts, and reports errors.
 - **Data layer:** `models/Complaint.js` defines and validates the MongoDB complaint document. MongoDB persists records across browser refreshes and server restarts.
 - **Configuration:** `dotenv` loads `PORT` and `MONGODB_URI` from `.env`. Only `.env.example` (without credentials) should be shared or committed.
 - **Demo records:** `scripts/seed.js` inserts sample complaints once into an empty collection; it does not erase existing records.
